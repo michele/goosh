@@ -1,5 +1,5 @@
 NAME=goosh
-VERSION=0.2.0
+VERSION=0.2.1
 
 prepare: # Download deps
 	@go get github.com/golang/dep/cmd/dep
