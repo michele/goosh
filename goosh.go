@@ -63,7 +63,7 @@ func (r *Request) initialize() {
 				r.batchedKeys = append(r.batchedKeys, k)
 			}
 		}
-		if r.Multiplexed.Devices != nil {
+		if r.Multiplexed != nil {
 			r.total += len(r.Multiplexed.Devices)
 			r.multiLen = len(r.Multiplexed.Devices)
 		}
