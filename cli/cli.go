@@ -76,7 +76,7 @@ func (c *Client) DoAsync(gr goosh.Request, callback string) error {
 	}
 
 	if res.StatusCode >= 300 {
-		err = errors.New("Something went wrong while calling goosh")
+		err = errors.New(fmt.Sprintf("Something went wrong while calling goosh [%d]", res.StatusCode))
 		return err
 	}
 	return nil
