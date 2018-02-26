@@ -18,6 +18,8 @@ type Request struct {
 	iterator    int
 	batchedKeys []string
 	initialized bool
+	total       int
+	multiLen    int
 }
 
 // Multiplexed provide a single payload for multiple devices
@@ -51,7 +53,7 @@ func (r *Request) Reset() {
 	r.iterator = -1
 }
 
-func (r *Request) Next() bool {
+func (r *Request) initialize() {
 	if !r.initialized {
 		r.Reset()
 		r.initialized = true
@@ -61,34 +63,41 @@ func (r *Request) Next() bool {
 				r.batchedKeys = append(r.batchedKeys, k)
 			}
 		}
+		if r.Multiplexed.Devices != nil {
+			r.total += len(r.Multiplexed.Devices)
+			r.multiLen = len(r.Multiplexed.Devices)
+		}
+		r.total += len(r.batchedKeys)
 	}
+}
+
+func (r *Request) Next() bool {
+	r.initialize()
 	r.iterator++
-	if r.iterator >= (len(r.Multiplexed.Devices) + len(r.batchedKeys)) {
+	if r.iterator >= r.total {
 		return false
 	}
 	return true
 }
 
 func (r *Request) Value() (msg Message) {
-	if r.iterator < len(r.Multiplexed.Devices) {
+	if r.iterator >= r.total {
+		return
+	}
+	if r.iterator < r.multiLen {
 		msg.Payload = r.Multiplexed.Payload
 		msg.Token = r.Multiplexed.Devices[r.iterator]
 		return
 	}
-	offi := r.iterator - len(r.Multiplexed.Devices)
+	offi := r.iterator - r.multiLen
 	msg.Token = r.batchedKeys[offi]
 	msg.Payload = (*r.Batched)[r.batchedKeys[offi]]
 	return
 }
 
-func (r Request) Count() (c int64) {
-	if r.Multiplexed != nil {
-		c = c + int64(len(r.Multiplexed.Devices))
-	}
-	if r.Batched != nil {
-		c = c + int64(len(*r.Batched))
-	}
-	return
+func (r Request) Count() int64 {
+	r.initialize()
+	return int64(r.total)
 }
 
 type Message struct {
