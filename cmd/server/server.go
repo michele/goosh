@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"time"
 
@@ -20,7 +21,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+const defaultCallbackTimeout = 30
+
+var callbackTimeout = defaultCallbackTimeout
+
 func main() {
+	var err error
 	wait := sync.WaitGroup{}
 	wait.Add(3)
 	sigint := make(chan os.Signal, 1)
@@ -31,8 +37,17 @@ func main() {
 	cb := factotum.NewWorkerGroup(1)
 	wg.Start()
 	cb.Start()
+
 	// Create our logger
 	logger := log.New(os.Stdout, "", 0)
+
+	if len(os.Getenv("GOOSH_CALLBACK_TIMEOUT")) > 0 {
+		callbackTimeout, err = strconv.Atoi(os.Getenv("GOOSH_CALLBACK_TIMEOUT"))
+		if err != nil {
+			logger.Printf("Couldn't parse ENV GOOSH_CALLBACK_TIMEOUT. Using default (%d) instead.", defaultCallbackTimeout)
+			callbackTimeout = defaultCallbackTimeout
+		}
+	}
 
 	s := NewServer(func(s *Server) { s.logger = logger }, func(s *Server) { s.apns = apns }, func(s *Server) { s.fcm = fcm }, func(s *Server) { s.cb = cb })
 
@@ -154,7 +169,7 @@ func (c callback) Work() bool {
 	try := 0
 	wait := 5
 	cli := http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: time.Duration(callbackTimeout) * time.Second,
 	}
 	for sent == false && try < 10 {
 		try++
