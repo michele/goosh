@@ -24,9 +24,21 @@ import (
 const defaultCallbackTimeout = 30
 
 var callbackTimeout = defaultCallbackTimeout
+var logger *log.Logger
+
+func init() {
+	var err error
+	logger := log.New(os.Stdout, "", 0)
+	if len(os.Getenv("GOOSH_CALLBACK_TIMEOUT")) > 0 {
+		callbackTimeout, err = strconv.Atoi(os.Getenv("GOOSH_CALLBACK_TIMEOUT"))
+		if err != nil {
+			logger.Printf("Couldn't parse ENV GOOSH_CALLBACK_TIMEOUT. Using default (%d) instead.", defaultCallbackTimeout)
+			callbackTimeout = defaultCallbackTimeout
+		}
+	}
+}
 
 func main() {
-	var err error
 	wait := sync.WaitGroup{}
 	wait.Add(3)
 	sigint := make(chan os.Signal, 1)
@@ -38,18 +50,7 @@ func main() {
 	wg.Start()
 	cb.Start()
 
-	// Create our logger
-	logger := log.New(os.Stdout, "", 0)
-
-	if len(os.Getenv("GOOSH_CALLBACK_TIMEOUT")) > 0 {
-		callbackTimeout, err = strconv.Atoi(os.Getenv("GOOSH_CALLBACK_TIMEOUT"))
-		if err != nil {
-			logger.Printf("Couldn't parse ENV GOOSH_CALLBACK_TIMEOUT. Using default (%d) instead.", defaultCallbackTimeout)
-			callbackTimeout = defaultCallbackTimeout
-		}
-	}
-
-	s := NewServer(func(s *Server) { s.logger = logger }, func(s *Server) { s.apns = apns }, func(s *Server) { s.fcm = fcm }, func(s *Server) { s.cb = cb })
+	s := NewServer(func(s *Server) { s.Logger = logger }, func(s *Server) { s.APNS = apns }, func(s *Server) { s.FCM = fcm }, func(s *Server) { s.CB = cb })
 
 	h := &http.Server{Addr: ":8080", Handler: s}
 
@@ -64,7 +65,7 @@ func main() {
 
 	<-sigint
 	logger.Println("\nShutting down the server...")
-	s.goingAway = true
+	s.GoingAway = true
 	go func() {
 		wg.Stop()
 		wait.Done()
@@ -85,17 +86,17 @@ func main() {
 }
 
 type Server struct {
-	logger    *log.Logger
+	Logger    *log.Logger
 	mux       *http.ServeMux
-	apns      goosh.PushService
-	fcm       goosh.PushService
-	cb        *factotum.WorkerGroup
-	goingAway bool
+	APNS      goosh.PushService
+	FCM       goosh.PushService
+	CB        *factotum.WorkerGroup
+	GoingAway bool
 }
 
 func NewServer(options ...func(*Server)) *Server {
 	s := &Server{
-		logger: log.New(os.Stdout, "", 0),
+		Logger: log.New(os.Stdout, "", 0),
 		mux:    http.NewServeMux(),
 	}
 
@@ -104,7 +105,7 @@ func NewServer(options ...func(*Server)) *Server {
 	}
 
 	s.mux.HandleFunc("/healtz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); fmt.Fprintf(w, "OK") })
-	s.mux.Handle("/push", s.pushHandler(s.cb, s.apns, s.fcm))
+	s.mux.Handle("/push", s.pushHandler(s.CB, s.APNS, s.FCM))
 
 	return s
 }
@@ -115,7 +116,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pushHandler(cb *factotum.WorkerGroup, apns goosh.PushService, fcm goosh.PushService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.goingAway {
+		if s.GoingAway {
 			w.WriteHeader(503)
 			return
 		}
