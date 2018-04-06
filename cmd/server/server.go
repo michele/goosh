@@ -24,21 +24,20 @@ import (
 const defaultCallbackTimeout = 30
 
 var callbackTimeout = defaultCallbackTimeout
-var logger *log.Logger
 
 func init() {
 	var err error
-	logger := log.New(os.Stdout, "", 0)
 	if len(os.Getenv("GOOSH_CALLBACK_TIMEOUT")) > 0 {
 		callbackTimeout, err = strconv.Atoi(os.Getenv("GOOSH_CALLBACK_TIMEOUT"))
 		if err != nil {
-			logger.Printf("Couldn't parse ENV GOOSH_CALLBACK_TIMEOUT. Using default (%d) instead.", defaultCallbackTimeout)
+			log.Printf("Couldn't parse ENV GOOSH_CALLBACK_TIMEOUT. Using default (%d) instead.", defaultCallbackTimeout)
 			callbackTimeout = defaultCallbackTimeout
 		}
 	}
 }
 
 func main() {
+	logger := log.New(os.Stdout, "", 0)
 	wait := sync.WaitGroup{}
 	wait.Add(3)
 	sigint := make(chan os.Signal, 1)
