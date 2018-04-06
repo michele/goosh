@@ -26,8 +26,11 @@ var (
 )
 
 type PushService struct {
-	client *client
-	queue  chan factotum.WorkRequest
+	client          *client
+	queue           chan factotum.WorkRequest
+	Instrument      bool
+	InstrumentPush  func(time.Duration)
+	InstrumentError func(int)
 }
 
 type client struct {
@@ -58,6 +61,7 @@ type workRequest struct {
 	res  chan<- goosh.DeviceResponse
 	cli  *client
 	akey string
+	ps   *PushService
 }
 
 func NewPushService(q chan factotum.WorkRequest) (ps *PushService) {
@@ -117,6 +121,7 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 				cli:  ps.client,
 				res:  results,
 				akey: r.FCMAuth.AuthKey,
+				ps:   ps,
 			}
 			ps.queue <- wr
 		}
@@ -148,7 +153,19 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 	return
 }
 
-func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse, error) {
+func (ps *PushService) instrumentError(code int) {
+	if ps.Instrument && ps.InstrumentError != nil {
+		ps.InstrumentError(code)
+	}
+}
+
+func (ps *PushService) instrumentPush(took time.Duration) {
+	if ps.Instrument && ps.InstrumentPush != nil {
+		ps.InstrumentPush(took)
+	}
+}
+
+func (cli *client) push(authKey string, msg goosh.Message, ps *PushService) (goosh.DeviceResponse, error) {
 	dr := goosh.DeviceResponse{
 		Identifier: msg.Token,
 	}
@@ -174,8 +191,10 @@ func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "key="+authKey)
 
+	start := time.Now()
 	resp, err := cli.http.Do(req)
 	if err != nil {
+		ps.instrumentError(599)
 		err = errors.Wrap(err, "couldn't make POST request to FCM")
 		wait := time.Now().Add(300 * time.Second)
 		dr.Error = &goosh.Error{
@@ -191,6 +210,7 @@ func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse
 	if resp.StatusCode == 200 {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
+			ps.instrumentError(422)
 			err = errors.Wrap(err, "couldn't read FCM response")
 			dr.Error = &goosh.Error{
 				Code:        422,
@@ -202,6 +222,7 @@ func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse
 		var fcmRes response
 		err = json.Unmarshal(body, &fcmRes)
 		if err != nil {
+			ps.instrumentError(422)
 			err = errors.Wrap(err, "couldn't unmarshal FCM response")
 			dr.Error = &goosh.Error{
 				Code:        422,
@@ -218,20 +239,24 @@ func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse
 		}
 		dr.Delivered = r.OK()
 		dr.Error = e
+		ps.instrumentPush(time.Now().Sub(start))
 		return dr, nil
 	} else if resp.StatusCode == 401 {
+		ps.instrumentError(resp.StatusCode)
 		dr.Error = &goosh.Error{
 			Code:        401,
 			Description: "wrong api key",
 		}
 		return dr, errors.New("wrong API key")
 	} else if resp.StatusCode == 400 {
+		ps.instrumentError(resp.StatusCode)
 		dr.Error = &goosh.Error{
 			Code:        400,
 			Description: "invalid payload, check JSON",
 		}
 		return dr, errors.New("invalid payload, check JSON")
 	} else if resp.StatusCode >= 500 {
+		ps.instrumentError(resp.StatusCode)
 		backoffLock.Lock()
 		waitUntil = time.Now()
 		retryAfter := resp.Header.Get("Retry-After")
@@ -257,6 +282,8 @@ func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse
 		}
 		return dr, errors.New("FCM error")
 	}
+
+	ps.instrumentError(resp.StatusCode)
 	dr.Error = &goosh.Error{
 		Code:        int64(resp.StatusCode),
 		Description: "Unknown response",
@@ -265,7 +292,7 @@ func (cli *client) push(authKey string, msg goosh.Message) (goosh.DeviceResponse
 }
 
 func (wr workRequest) Work() bool {
-	dr, err := wr.cli.push(wr.akey, wr.msg)
+	dr, err := wr.cli.push(wr.akey, wr.msg, wr.ps)
 	wr.res <- dr
 	if err != nil {
 		// TODO: handle error

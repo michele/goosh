@@ -33,9 +33,12 @@ var (
 )
 
 type PushService struct {
-	clients map[string]client
-	lock    sync.Mutex
-	queue   chan factotum.WorkRequest
+	clients         map[string]client
+	lock            sync.Mutex
+	queue           chan factotum.WorkRequest
+	Instrument      bool
+	InstrumentPush  func(time.Duration)
+	InstrumentError func(int)
 }
 
 type client struct {
@@ -57,6 +60,7 @@ type workRequest struct {
 	msg goosh.Message
 	res chan<- goosh.DeviceResponse
 	cli *client
+	ps  *PushService
 }
 
 type response struct {
@@ -140,7 +144,7 @@ func (c *client) urlForDevice(device string) string {
 	return "https://" + c.host() + "/3/device/" + device
 }
 
-func (c *client) Push(m goosh.Message) (goosh.DeviceResponse, error) {
+func (c *client) Push(m goosh.Message, ps *PushService) (goosh.DeviceResponse, error) {
 	body, _ := json.Marshal(m.Payload)
 	device := m.Token
 	dres := goosh.DeviceResponse{}
@@ -161,10 +165,12 @@ func (c *client) Push(m goosh.Message) (goosh.DeviceResponse, error) {
 	//resp, err := client.Post(, "application/json", )
 	not_sent := true
 	retries := 5
+	start := time.Now()
 	var resp *http.Response
 	for not_sent {
 		resp, err = c.http.Do(req)
 		if err != nil {
+			ps.instrumentError(599)
 			if retries <= 0 {
 				errors.Wrap(err, "couldn't make request to APNS")
 				wait := time.Now().Add(300 * time.Second)
@@ -184,6 +190,7 @@ func (c *client) Push(m goosh.Message) (goosh.DeviceResponse, error) {
 		ioutil.ReadAll(resp.Body)
 		dres.Delivered = true
 	} else {
+		ps.instrumentError(resp.StatusCode)
 		apnsError := goosh.Error{Code: int64(resp.StatusCode)}
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -208,11 +215,14 @@ func (c *client) Push(m goosh.Message) (goosh.DeviceResponse, error) {
 		}
 		dres.Error = &apnsError
 	}
+	if resp.StatusCode == 200 {
+		ps.instrumentPush(time.Now().Sub(start))
+	}
 	return dres, nil
 }
 
 func (wr workRequest) Work() bool {
-	dr, err := wr.cli.Push(wr.msg)
+	dr, err := wr.cli.Push(wr.msg, wr.ps)
 	wr.res <- dr
 	if err != nil {
 		// TODO: handle error
@@ -263,6 +273,7 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 				msg: r.Value(),
 				cli: &cli,
 				res: results,
+				ps:  ps,
 			}
 			ps.queue <- wr
 		}
@@ -292,6 +303,18 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 		Failure: failed,
 	}
 	return
+}
+
+func (ps *PushService) instrumentError(code int) {
+	if ps.Instrument && ps.InstrumentError != nil {
+		ps.InstrumentError(code)
+	}
+}
+
+func (ps *PushService) instrumentPush(took time.Duration) {
+	if ps.Instrument && ps.InstrumentPush != nil {
+		ps.InstrumentPush(took)
+	}
 }
 
 func GetMD5Hash(text []byte) string {
