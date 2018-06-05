@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -295,7 +296,7 @@ func (wr workRequest) Work() bool {
 	dr, err := wr.cli.push(wr.akey, wr.msg, wr.ps)
 	wr.res <- dr
 	if err != nil {
-		// TODO: handle error
+		log.Printf("Got an error sending push: %+v", err)
 		return false
 	}
 	return true
