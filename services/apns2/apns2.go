@@ -93,8 +93,8 @@ func cacheKey(r goosh.Request) (string, error) {
 
 var dialTLS = func(network, addr string, cfg *tls.Config) (net.Conn, error) {
 	dialer := &net.Dialer{
-		Timeout:   TLSDialTimeout,
-		KeepAlive: TCPKeepAlive,
+		Timeout:   30 * time.Second,
+		KeepAlive: 360 * time.Second,
 	}
 	return tls.DialWithDialer(dialer, network, addr, cfg)
 }
@@ -132,10 +132,10 @@ func newClient(ck string, r goosh.Request) (cli client, err error) {
 	}
 
 	if len(certs.Certificate) > 0 {
-		tlsConfig.BuildNameToCertificate()
+		conf.BuildNameToCertificate()
 	}
 	transport := &http2.Transport{
-		TLSClientConfig: tlsConfig,
+		TLSClientConfig: conf,
 		DialTLS:         dialTLS,
 	}
 
