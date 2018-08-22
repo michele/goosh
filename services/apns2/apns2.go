@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -90,6 +91,14 @@ func cacheKey(r goosh.Request) (string, error) {
 	return GetMD5Hash(key), nil
 }
 
+var dialTLS = func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+	dialer := &net.Dialer{
+		Timeout:   TLSDialTimeout,
+		KeepAlive: TCPKeepAlive,
+	}
+	return tls.DialWithDialer(dialer, network, addr, cfg)
+}
+
 func newClient(ck string, r goosh.Request) (cli client, err error) {
 	pemData, err := base64.StdEncoding.DecodeString(r.APNSAuth.Certificate)
 	if err != nil {
@@ -120,12 +129,19 @@ func newClient(ck string, r goosh.Request) (cli client, err error) {
 
 	conf := &tls.Config{
 		Certificates: []tls.Certificate{certs},
-		NextProtos:   []string{"h2"},
 	}
+
+	if len(certs.Certificate) > 0 {
+		tlsConfig.BuildNameToCertificate()
+	}
+	transport := &http2.Transport{
+		TLSClientConfig: tlsConfig,
+		DialTLS:         dialTLS,
+	}
+
 	hcli := &http.Client{
-		Transport: &http2.Transport{
-			TLSClientConfig: conf,
-		},
+		Transport: transport,
+		Timeout:   60 * time.Second,
 	}
 
 	cli.certificates = certs
@@ -236,6 +252,7 @@ func (ps *PushService) getClient(r goosh.Request) (cli client, err error) {
 	var ok bool
 	var ck string
 	ps.lock.Lock()
+	defer ps.lock.Unlock()
 	ck, err = cacheKey(r)
 	if err != nil {
 		err = errors.Wrap(err, "Couldn't get cacheKey")
@@ -250,7 +267,6 @@ func (ps *PushService) getClient(r goosh.Request) (cli client, err error) {
 		}
 		ps.clients[ck] = cli
 	}
-	ps.lock.Unlock()
 	return
 }
 
