@@ -70,14 +70,14 @@ func (s *Server) pushHandler(cb *factotum.WorkerGroup, apns goosh.PushService, f
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			err = errors.Wrap(err, "Couldn't read body")
-			log.Printf("%+v", err)
+			log.Printf("%+v\nThis was the request: %+v", err, r)
 			http.Error(w, "", 500)
 			return
 		}
 		err = json.Unmarshal(body, &req)
 		if err != nil {
 			err = errors.Wrap(err, "Couldn't unmarshal body into request")
-			log.Printf("%+v", err)
+			log.Printf("%+v\nThis was the body: %s", err, string(body))
 			http.Error(w, "", 400)
 			return
 		}
@@ -120,18 +120,28 @@ func (c callback) Work() bool {
 	}
 	for sent == false && try < 10 {
 		try++
-		body, _ := json.Marshal(c.response)
-		creq, _ := http.NewRequest("POST", c.url, ioutil.NopCloser(bytes.NewBuffer(body)))
+		body, err := json.Marshal(c.response)
+		if err != nil {
+			err = errors.Wrap(err, "couldn't marshal response")
+			log.Printf("Couldn't marshal response: %+v\nThis was the response: %+v", err, c.response)
+			continue
+		}
+		creq, err := http.NewRequest("POST", c.url, ioutil.NopCloser(bytes.NewBuffer(body)))
+		if err != nil {
+			err = errors.Wrap(err, "couldn't build HTTP request")
+			log.Printf("Couldn't build request: %+v\nURL: %s\nThis was the response: %+v", err, c.url, c.response)
+			continue
+		}
 		cres, err := cli.Do(creq)
 		if err != nil {
 			err = errors.Wrap(err, "couldn't trigger callback")
-			log.Printf("Couldn't call callback: %+v", err)
+			log.Printf("Couldn't call callback: %+v\nThis was the body: %s", err, string(body))
 		} else if cres.StatusCode >= 500 {
 			err = errors.New("got error calling callback")
-			log.Printf("Error calling callback: %+v", cres)
+			log.Printf("Error calling callback: %+v\nThis was the body: %s", cres, string(body))
 		} else if cres.StatusCode >= 400 {
 			err = errors.New("something's not right with callback")
-			log.Printf("Got a 4XX from callback: %+v", cres)
+			log.Printf("Got a 4XX from callback: %+v\nThis was the body: %s", cres, string(body))
 			sent = true
 		} else {
 			sent = true
