@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -41,6 +42,7 @@ type PushService struct {
 	Instrument      bool
 	InstrumentPush  func(time.Duration)
 	InstrumentError func(int)
+	Logger          *log.Logger
 }
 
 type client struct {
@@ -73,6 +75,7 @@ func NewPushService(q chan factotum.WorkRequest) (ps *PushService) {
 	ps = &PushService{}
 	ps.clients = map[string]client{}
 	ps.queue = q
+	ps.Logger = log.New(os.Stdout, "", 0)
 	return ps
 }
 
@@ -176,6 +179,7 @@ func (c *client) Push(m goosh.Message, ps *PushService) (goosh.DeviceResponse, e
 
 	if err != nil {
 		err = errors.Wrap(err, "error building APNS request")
+		ps.Logger.Printf("Error building request: %+v", err)
 		dres.Error = &goosh.Error{Description: "error building APNS request"}
 		return dres, err
 	}
@@ -188,8 +192,9 @@ func (c *client) Push(m goosh.Message, ps *PushService) (goosh.DeviceResponse, e
 		resp, err = c.http.Do(req)
 		if err != nil {
 			ps.instrumentError(599)
+			err = errors.Wrap(err, "couldn't make request to APNS")
+			ps.Logger.Printf("Couldn't contact APNS (tries left: %d): %+v", retries, err)
 			if retries <= 0 {
-				errors.Wrap(err, "couldn't make request to APNS")
 				wait := time.Now().Add(300 * time.Second)
 				dres.Error = &goosh.Error{ShouldRetry: true, RetryAt: &wait, Code: 502, Description: "couldn't make request to APNS"}
 				return dres, err
@@ -212,6 +217,7 @@ func (c *client) Push(m goosh.Message, ps *PushService) (goosh.DeviceResponse, e
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			err = errors.Wrap(err, "couldn't read APNS response")
+			ps.Logger.Printf("Couldn't read response: %+v", err)
 			apnsError.Description = "couldn't read APNS response"
 			dres.Error = &apnsError
 			return dres, err
@@ -220,6 +226,7 @@ func (c *client) Push(m goosh.Message, ps *PushService) (goosh.DeviceResponse, e
 		err = json.Unmarshal(body, &parsedErr)
 		if err != nil {
 			err = errors.Wrap(err, "couldn't parse APNS response")
+			ps.Logger.Printf("Couldn't parse response: %+v", err)
 			apnsError.Description = "couldn't parse APNS response"
 			dres.Error = &apnsError
 			return dres, err
@@ -280,6 +287,7 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 	if err != nil {
 		// TODO: Setup response with error
 		err = errors.Wrap(err, "Couldn't get client")
+		ps.Logger.Printf("Error getting client: %+v", err)
 		return
 	}
 	results := make(chan goosh.DeviceResponse, 10)
