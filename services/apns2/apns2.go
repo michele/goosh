@@ -289,7 +289,7 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 		err = errors.Wrap(err, "Couldn't get client")
 		resp.PushID = r.PushID
 		resp.Failed = true
-		resp.Failure = len(r.Count())
+		resp.Failure = r.Count()
 		resp.Error = &goosh.Error{
 			ShouldRetry: false,
 			Code:        422,
