@@ -287,6 +287,18 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 	if err != nil {
 		// TODO: Setup response with error
 		err = errors.Wrap(err, "Couldn't get client")
+		resp.PushID = r.PushID
+		resp.Failed = true
+		resp.Failure = len(r.Count())
+		resp.Error = &goosh.Error{
+			ShouldRetry: false,
+			Code:        422,
+			Description: "InvalidCert",
+		}
+		resp.Devices = []goosh.DeviceResponse{}
+		for r.Next() {
+			resp.Devices = append(resp.Devices, goosh.DeviceResponse{Identifier: r.Value().Token})
+		}
 		ps.Logger.Printf("Error getting client: %+v", err)
 		return
 	}
