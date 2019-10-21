@@ -50,6 +50,10 @@ func NewClient(protocol, host, port string) *Client {
 	return c
 }
 
+func (c *Client) HTTP() *http.Client {
+	return c.http
+}
+
 func (c *Client) DoAsync(gr goosh.Request, callback string) error {
 	body, err := json.Marshal(gr)
 
