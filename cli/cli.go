@@ -81,3 +81,49 @@ func (c *Client) DoAsync(gr goosh.Request, callback string) error {
 	}
 	return nil
 }
+
+func (c *Client) Do(gr goosh.Request) (*goosh.Response, error) {
+	body, err := json.Marshal(gr)
+
+	if err != nil {
+		err = errors.Wrap(err, "Couldn't marshal body")
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s:%s/push", c.protocol, c.host, c.port), ioutil.NopCloser(bytes.NewBuffer(body)))
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	if err != nil {
+		err = errors.Wrap(err, "Couldn't build request")
+		return nil, err
+	}
+
+	res, err := c.http.Do(req)
+
+	if err != nil {
+		err = errors.Wrap(err, "Couldn't call goosh")
+		return nil, err
+	}
+
+	if res.StatusCode >= 300 {
+		err = errors.New(fmt.Sprintf("Something went wrong while calling goosh [%d]", res.StatusCode))
+		return nil, err
+	}
+
+	defer res.Body.Close()
+	body, err = ioutil.ReadAll(res.Body)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't read response body")
+	}
+
+	var gresp goosh.Response
+	err = json.Unmarshal(body, &gresp)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't parse JSON response")
+	}
+	return &gresp, nil
+}
