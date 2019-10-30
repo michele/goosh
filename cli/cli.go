@@ -8,8 +8,13 @@ import (
 	"net/http"
 	"time"
 
+	"git.sr.ht/~mmf/queuer"
 	"github.com/michele/goosh"
 	"github.com/pkg/errors"
+)
+
+var (
+	ErrQueueNotAvailable = errors.New("Queue isn't set on the client")
 )
 
 type Client struct {
@@ -17,6 +22,7 @@ type Client struct {
 	host     string
 	port     string
 	protocol string
+	queue    queuer.Queue
 }
 
 func NewClient(protocol, host, port string) *Client {
@@ -48,6 +54,10 @@ func NewClient(protocol, host, port string) *Client {
 	}
 
 	return c
+}
+
+func (c *Client) SetQueue(q queuer.Queue) {
+	c.queue = q
 }
 
 func (c *Client) HTTP() *http.Client {
@@ -130,4 +140,40 @@ func (c *Client) Do(gr goosh.Request) (*goosh.Response, error) {
 		return nil, errors.Wrap(err, "Couldn't parse JSON response")
 	}
 	return &gresp, nil
+}
+
+func (c *Client) Enqueue(gr *goosh.Request) error {
+	if c.queue == nil {
+		return ErrQueueNotAvailable
+	}
+	bts, err := json.Marshal(gr)
+
+	if err != nil {
+		return errors.Wrap(err, "Goosh#Enqueue: couldn't marshal request")
+	}
+
+	err = c.queue.Publish(bts)
+
+	if err != nil {
+		return errors.Wrap(err, "Goosh#Enqueue: couldn't push request into queue")
+	}
+
+	return nil
+}
+
+func (c *Client) Pop() (*goosh.Response, error) {
+	if c.queue == nil {
+		return nil, ErrQueueNotAvailable
+	}
+
+	obj := <-c.queue.Receive()
+
+	var gr goosh.Response
+	err := json.Unmarshal(obj.Body(), &gr)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Goosh#Enqueue: couldn't unmarshal request")
+	}
+
+	return &gr, nil
 }
