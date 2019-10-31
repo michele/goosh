@@ -15,6 +15,7 @@ type Request struct {
 	Batched     *Batched     `json:"batched,omitempty"`
 	APNSAuth    *APNSAuth    `json:"apns,omitempty"`
 	FCMAuth     *FCMAuth     `json:"fcm,omitempty"`
+	CustomID    string       `json:"custom_id"`
 	iterator    int
 	batchedKeys []string
 	initialized bool
@@ -106,12 +107,13 @@ type Message struct {
 }
 
 type Response struct {
-	Failed  bool             `json:"failed"`
-	Error   *Error           `json:"error,omitempty"`
-	Devices []DeviceResponse `json:"devices,omitempty"`
-	Success int64            `json:"success"`
-	Failure int64            `json:"failure"`
-	PushID  string           `json:"push_id"`
+	Failed   bool             `json:"failed"`
+	Error    *Error           `json:"error,omitempty"`
+	Devices  []DeviceResponse `json:"devices,omitempty"`
+	Success  int64            `json:"success"`
+	Failure  int64            `json:"failure"`
+	PushID   string           `json:"push_id"`
+	CustomID string           `json:"custom_id"`
 }
 
 type Error struct {
