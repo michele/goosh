@@ -18,11 +18,13 @@ var (
 )
 
 type Client struct {
-	http     *http.Client
-	host     string
-	port     string
-	protocol string
-	queue    queuer.Queue
+	http      *http.Client
+	host      string
+	port      string
+	protocol  string
+	queue     queuer.Queue
+	quit      chan bool
+	responses chan *goosh.Response
 }
 
 func NewClient(protocol, host, port string) *Client {
@@ -176,4 +178,37 @@ func (c *Client) Pop() (*goosh.Response, error) {
 	}
 
 	return &gr, nil
+}
+
+func (c *Client) Start() error {
+	if c.queue == nil {
+		return ErrQueueNotAvailable
+	}
+
+	c.responses = make(chan *goosh.Response)
+
+	go func() {
+		for {
+			select {
+			case <-c.quit:
+				return
+			case obj := <-c.queue.Receive():
+				var gr goosh.Response
+				err := json.Unmarshal(obj.Body(), &gr)
+
+				if err == nil {
+					c.responses <- &gr
+				}
+			}
+		}
+	}()
+	return nil
+}
+
+func (c *Client) Quit() {
+	close(c.quit)
+}
+
+func (c *Client) Receive() <-chan *goosh.Response {
+	return c.responses
 }
