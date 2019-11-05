@@ -211,7 +211,7 @@ func (c *Client) Start() error {
 
 func (c *Client) Quit() {
 	close(c.quit)
-	<-done
+	<-c.done
 }
 
 func (c *Client) Receive() <-chan *goosh.Response {
