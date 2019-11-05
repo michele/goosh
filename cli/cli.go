@@ -23,6 +23,7 @@ type Client struct {
 	port      string
 	protocol  string
 	queue     queuer.Queue
+	outQueue  queuer.Queue
 	quit      chan bool
 	responses chan *goosh.Response
 }
@@ -58,8 +59,9 @@ func NewClient(protocol, host, port string) *Client {
 	return c
 }
 
-func (c *Client) SetQueue(q queuer.Queue) {
+func (c *Client) SetQueues(q, out queuer.Queue) {
 	c.queue = q
+	c.outQueue = out
 }
 
 func (c *Client) HTTP() *http.Client {
@@ -164,11 +166,11 @@ func (c *Client) Enqueue(gr *goosh.Request) error {
 }
 
 func (c *Client) Pop() (*goosh.Response, error) {
-	if c.queue == nil {
+	if c.outQueue == nil {
 		return nil, ErrQueueNotAvailable
 	}
 
-	obj := <-c.queue.Receive()
+	obj := <-c.outQueue.Receive()
 
 	var gr goosh.Response
 	err := json.Unmarshal(obj.Body(), &gr)
@@ -181,7 +183,7 @@ func (c *Client) Pop() (*goosh.Response, error) {
 }
 
 func (c *Client) Start() error {
-	if c.queue == nil {
+	if c.outQueue == nil {
 		return ErrQueueNotAvailable
 	}
 
@@ -192,7 +194,7 @@ func (c *Client) Start() error {
 			select {
 			case <-c.quit:
 				return
-			case obj := <-c.queue.Receive():
+			case obj := <-c.outQueue.Receive():
 				var gr goosh.Response
 				err := json.Unmarshal(obj.Body(), &gr)
 
