@@ -25,6 +25,7 @@ type Client struct {
 	queue     queuer.Queue
 	outQueue  queuer.Queue
 	quit      chan bool
+	done      chan bool
 	responses chan *goosh.Response
 }
 
@@ -55,7 +56,7 @@ func NewClient(protocol, host, port string) *Client {
 	c.http = &http.Client{
 		Transport: tr,
 	}
-
+	c.done = make(chan bool)
 	return c
 }
 
@@ -193,6 +194,7 @@ func (c *Client) Start() error {
 		for {
 			select {
 			case <-c.quit:
+				close(c.done)
 				return
 			case obj := <-c.outQueue.Receive():
 				var gr goosh.Response
@@ -209,6 +211,7 @@ func (c *Client) Start() error {
 
 func (c *Client) Quit() {
 	close(c.quit)
+	<-done
 }
 
 func (c *Client) Receive() <-chan *goosh.Response {
