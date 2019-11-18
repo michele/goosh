@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 
@@ -200,9 +201,11 @@ func (c *Client) Start() error {
 				var gr goosh.Response
 				err := json.Unmarshal(obj.Body(), &gr)
 
-				if err == nil {
-					c.responses <- &gr
+				if err != nil {
+					log.Printf("Client#Start: couldn't unmarshal response: %+v", err)
+					continue
 				}
+				c.responses <- &gr
 			}
 		}
 	}()
