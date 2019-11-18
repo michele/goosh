@@ -21,6 +21,7 @@ type Request struct {
 	initialized bool
 	total       int
 	multiLen    int
+	done        func() error
 }
 
 // Multiplexed provide a single payload for multiple devices
@@ -101,6 +102,16 @@ func (r Request) Count() int64 {
 	return int64(r.total)
 }
 
+func (r *Request) SetDone(f func() error) {
+	r.done = f
+}
+
+func (r Request) Done() {
+	if r.done != nil {
+		r.done()
+	}
+}
+
 type Message struct {
 	Token   string
 	Payload json.RawMessage
@@ -114,6 +125,17 @@ type Response struct {
 	Failure  int64            `json:"failure"`
 	PushID   string           `json:"push_id"`
 	CustomID string           `json:"custom_id"`
+	done     func() error
+}
+
+func (r *Response) SetDone(f func() error) {
+	r.done = f
+}
+
+func (r Response) Done() {
+	if r.done != nil {
+		r.done()
+	}
 }
 
 type Error struct {

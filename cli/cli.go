@@ -205,6 +205,7 @@ func (c *Client) Start() error {
 					log.Printf("Client#Start: couldn't unmarshal response: %+v", err)
 					continue
 				}
+				gr.SetDone(obj.Done)
 				c.responses <- &gr
 			}
 		}
