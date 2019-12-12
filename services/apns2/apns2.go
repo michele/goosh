@@ -335,10 +335,12 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 		}
 	}
 	resp = goosh.Response{
-		Devices: resps,
-		PushID:  r.PushID,
-		Success: success,
-		Failure: failed,
+		Devices:  resps,
+		PushID:   r.PushID,
+		Success:  success,
+		Failure:  failed,
+		CustomID: r.CustomID,
+		Service:  "apns",
 	}
 	return
 }
