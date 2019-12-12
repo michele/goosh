@@ -284,6 +284,7 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 	var cli client
 	cli, err = ps.getClient(r)
 	resp.CustomID = r.CustomID
+	resp.Service = "apns"
 	if err != nil {
 		// TODO: Setup response with error
 		err = errors.Wrap(err, "Couldn't get client")

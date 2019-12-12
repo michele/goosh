@@ -114,6 +114,7 @@ func (ps *PushService) Process(r goosh.Request) (resp goosh.Response, err error)
 	}
 
 	resp.CustomID = r.CustomID
+	resp.Service = "fcm"
 	results := make(chan goosh.DeviceResponse, 10)
 	left := r.Count()
 	go func() {
