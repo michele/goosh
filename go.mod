@@ -8,6 +8,7 @@ require (
 	github.com/google/uuid v0.0.0-20161128191214-064e2069ce9c
 	github.com/michele/factotum v0.1.0
 	github.com/pkg/errors v0.8.1
-	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
-	golang.org/x/text v0.3.2
+	github.com/stretchr/testify v1.8.1 // indirect
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/text v0.3.8 // indirect
 )
